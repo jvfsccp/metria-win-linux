@@ -119,20 +119,20 @@ function Widget(): JSX.Element {
     }
   };
   return (
-    <main className={`relative flex h-full w-full select-none overflow-hidden border border-white/10 bg-black/90 shadow-none transition-opacity duration-200 ${vertical ? "flex-col py-3" : "flex-row px-3"} cursor-grab active:cursor-grabbing`} style={{ opacity: (settings.data?.widgetOpacity ?? 1) * (autoHide && !hovered ? 0.55 : 1), boxShadow: "none", borderRadius: position === "right" ? "18px 0 0 18px" : position === "left" ? "0 18px 18px 0" : position === "top" ? "0 0 18px 18px" : "18px 18px 0 0" }} onContextMenu={(event) => { event.preventDefault(); void window.metria.openWidgetMenu(); }} onMouseEnter={() => setHovered(true)} onMouseMove={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
-      {autoHide && !hovered && <span className="absolute inset-0 flex items-center justify-center text-xs text-mute" aria-label="Hover to open widget">{position === "right" ? "<" : position === "left" ? ">" : position === "top" ? "v" : "^"}</span>}
-      <section className={`flex min-h-0 min-w-0 flex-1 items-center justify-center gap-2 ${vertical ? "flex-col" : "flex-row"}`}>
+    <main className={`notch-rail relative flex h-full w-full select-none overflow-hidden transition-opacity duration-200 ${vertical ? "flex-col py-3" : "flex-row px-3"} cursor-grab active:cursor-grabbing notch-${position}`} style={{ opacity: (settings.data?.widgetOpacity ?? 1) * (autoHide && !hovered ? 0.55 : 1) }} onContextMenu={(event) => { event.preventDefault(); void window.metria.openWidgetMenu(); }} onMouseEnter={() => setHovered(true)} onMouseMove={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+      {autoHide && !hovered && <span className="notch-hidden-hint absolute inset-0 flex items-center justify-center text-xs" aria-label="Hover to open widget">{position === "right" ? "<" : position === "left" ? ">" : position === "top" ? "v" : "^"}</span>}
+      <section className={`notch-provider-list flex min-h-0 min-w-0 flex-1 items-center justify-center ${vertical ? "flex-col" : "flex-row"}`}>
         {displayed.map((provider, index) => (
           <div
             key={provider.kind}
             data-index={index}
-            className={`flex shrink-0 cursor-pointer items-center justify-center gap-[3px] ${vertical ? "w-16 flex-col" : "h-16 flex-col"} ${size === "small" ? "scale-90" : size === "large" ? "scale-110" : ""}`}
+            className={`notch-provider-item flex shrink-0 cursor-pointer items-center justify-center gap-[3px] ${vertical ? "w-16 flex-col" : "h-16 flex-col"} ${size === "small" ? "scale-90" : size === "large" ? "scale-110" : ""}`}
             style={{ width: vertical ? 64 : WIDGET_ITEM_HEIGHT, height: vertical ? WIDGET_ITEM_HEIGHT : 64 }}
             onClick={() => { if (!moved.current) void window.metria.openDashboard(); }}
             onMouseEnter={() => { void window.metria.setProviderHover(index); }}
           >
             <Ring provider={provider} alert={settings.data?.alerts ?? { enabled: true, cautionThreshold: 40, warningThreshold: 65, criticalThreshold: 85, cautionColor: "#ffd60a", warningColor: "#ff9f0a", criticalColor: "#ff453a" }} />
-            <span className="text-[11px] font-semibold leading-none text-white">
+            <span className="notch-provider-percent text-[11px] leading-none text-white">
               {Math.round(clampPercent(primary(provider)))}%
             </span>
           </div>

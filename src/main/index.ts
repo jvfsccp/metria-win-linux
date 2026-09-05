@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray } f
 import { autoUpdater } from "electron-updater";
 import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { ALL_PROVIDER_KINDS, CARD_WIDTH, isProviderKind, PROVIDER_LOGOS, providerShortLabel, WIDGET_ITEM_HEIGHT } from "../shared/types";
+import { ALL_PROVIDER_KINDS, CARD_WIDTH, isProviderKind, PROVIDER_LOGOS, providerShortLabel, WIDGET_ITEM_GAP, WIDGET_ITEM_HEIGHT, WIDGET_PADDING, WIDGET_WIDTH } from "../shared/types";
 import { ProviderService } from "./providers";
 import { SettingsStore } from "./settings";
 import type { AppSettings, ProviderKind, ProviderSourceChoice, ProviderUsage } from "../shared/types";
@@ -61,9 +61,6 @@ function showDashboardSettings(): void {
 /** Opaque compact widget that stays visible on Windows and Linux. Linux needs
  * it because the system tray is unavailable to some GUI environments; Windows
  * uses it as the primary provider surface instead of separate tray badges. */
-const WIDGET_WIDTH = 88;
-const WIDGET_ITEM_GAP = 8;
-const WIDGET_PADDING = 12;
 function supportsWidget(): boolean { return process.platform === "win32" || process.platform === "linux"; }
 function display(): Electron.Display {
   const selected = settings.load().widgetDisplayId;
@@ -72,11 +69,62 @@ function display(): Electron.Display {
 function displayArea(): Electron.Rectangle {
   return display().workArea;
 }
+
+function roundedRows(x: number, y: number, width: number, height: number, radius: number): Electron.Rectangle[] {
+  const rows: Electron.Rectangle[] = [];
+  const r = Math.min(radius, Math.floor(width / 2), Math.floor(height / 2));
+  for (let row = 0; row < height; row += 1) {
+    const distance = row < r ? r - row - 0.5 : row >= height - r ? row - (height - r) + 0.5 : 0;
+    const inset = distance > 0 ? Math.ceil(r - Math.sqrt(Math.max(0, r * r - distance * distance))) : 0;
+    rows.push({ x: x + inset, y: y + row, width: Math.max(1, width - inset * 2), height: 1 });
+  }
+  return rows;
+}
+
+function widgetShape(bounds: Electron.Rectangle, position: AppSettings["widgetPosition"]): Electron.Rectangle[] {
+  const radius = Math.min(40, Math.floor((position === "left" || position === "right" ? bounds.width : bounds.height) / 2));
+  const rows: Electron.Rectangle[] = [];
+  for (let y = 0; y < bounds.height; y += 1) {
+    const roundedY = position === "top" ? y >= bounds.height - radius : position === "bottom" ? y < radius : true;
+    const distance = y < radius ? radius - y - 0.5 : y >= bounds.height - radius ? y - (bounds.height - radius) + 0.5 : 0;
+    const inset = roundedY && distance > 0 ? Math.ceil(radius - Math.sqrt(Math.max(0, radius * radius - distance * distance))) : 0;
+    const leftInset = position === "right" || position === "top" || position === "bottom" ? inset : 0;
+    const rightInset = position === "left" || position === "top" || position === "bottom" ? inset : 0;
+    rows.push({ x: leftInset, y, width: Math.max(1, bounds.width - leftInset - rightInset), height: 1 });
+  }
+  return rows;
+}
+
+function cardShape(width: number, height: number, position: AppSettings["widgetPosition"]): Electron.Rectangle[] {
+  const pointerWidth = 16;
+  const pointerHeight = 34;
+  const horizontal = position === "left" || position === "right";
+  const bodyX = position === "left" ? pointerWidth : horizontal ? 0 : 8;
+  const bodyY = position === "top" ? pointerWidth : 0;
+  const bodyWidth = horizontal ? width - pointerWidth : width - 16;
+  const bodyHeight = horizontal ? height : height - pointerWidth;
+  const shape = roundedRows(bodyX, bodyY, bodyWidth, bodyHeight, 24);
+
+  for (let step = 0; step < pointerHeight; step += 1) {
+    const distance = Math.abs(step - (pointerHeight - 1) / 2);
+    const extent = Math.max(1, Math.round(pointerWidth * (1 - distance / (pointerHeight / 2))));
+    if (position === "right") shape.push({ x: bodyX + bodyWidth, y: Math.floor((height - pointerHeight) / 2) + step, width: extent, height: 1 });
+    else if (position === "left") shape.push({ x: pointerWidth - extent, y: Math.floor((height - pointerHeight) / 2) + step, width: extent, height: 1 });
+  }
+  if (!horizontal) {
+    for (let step = 0; step < pointerWidth; step += 1) {
+      const halfWidth = Math.max(1, Math.round((pointerHeight / 2) * (position === "top" ? (step + 1) / pointerWidth : (pointerWidth - step) / pointerWidth)));
+      shape.push({ x: Math.floor(width / 2) - halfWidth, y: position === "top" ? step : bodyHeight + step, width: halfWidth * 2, height: 1 });
+    }
+  }
+  return shape;
+}
+
 function widgetBounds(area: Electron.Rectangle, providerCount: number): Electron.Rectangle {
   const current = settings.load();
   const scale = current.widgetSize === "small" ? 0.85 : current.widgetSize === "large" ? 1.15 : 1;
   const thickness = Math.round(WIDGET_WIDTH * scale);
-  const extent = Math.max(76, Math.round(providerCount * WIDGET_ITEM_HEIGHT * scale + Math.max(0, providerCount - 1) * WIDGET_ITEM_GAP * scale + WIDGET_PADDING * 2 * scale));
+  const extent = Math.max(80, Math.round(providerCount * WIDGET_ITEM_HEIGHT * scale + Math.max(0, providerCount - 1) * WIDGET_ITEM_GAP * scale + WIDGET_PADDING * 2 * scale));
   const vertical = current.widgetPosition === "left" || current.widgetPosition === "right";
   const width = vertical ? thickness : extent;
   const height = vertical ? extent : thickness;
@@ -90,7 +138,7 @@ function createWidgetWindow(): BrowserWindow {
   const initial = widgetBounds(displayArea(), 0);
   const widget = new BrowserWindow({
     x: initial.x, y: initial.y, width: initial.width, height: initial.height, frame: false, resizable: false, movable: false,
-    backgroundColor: "#00000000", transparent: true, skipTaskbar: true, alwaysOnTop: true, hasShadow: false, type: "toolbar", title: "Metria usage widget",
+    backgroundColor: "#00000000", transparent: true, skipTaskbar: true, alwaysOnTop: true, hasShadow: false, type: "notification", title: "Metria usage widget",
     webPreferences: { preload: join(__dirname, "../preload/index.js"), contextIsolation: true, sandbox: true, nodeIntegration: false }
   });
   widget.loadFile(join(__dirname, "../renderer/widget.html"));
@@ -106,7 +154,9 @@ function updateWidgetBounds(values: typeof lastUsage): void {
   if (!widgetWindow) return;
   const enabled = settings.load().enabledProviders;
   const count = values.filter((provider) => enabled.includes(provider.kind)).length;
-    widgetWindow.setBounds(widgetBounds(displayArea(), count));
+  const bounds = widgetBounds(displayArea(), count);
+  widgetWindow.setBounds(bounds);
+  widgetWindow.setShape(widgetShape(bounds, settings.load().widgetPosition));
   if (cardActiveIndex !== null) positionCard(cardActiveIndex);
 }
 
@@ -123,7 +173,7 @@ function createCardWindow(): BrowserWindow {
   const card = new BrowserWindow({
     x: initial.x, y: initial.y, width: initial.width, height: initial.height,
     frame: false, transparent: true, resizable: false, movable: false,
-    skipTaskbar: true, alwaysOnTop: true, hasShadow: false, type: "toolbar", show: false, title: "Metria usage card",
+    skipTaskbar: true, alwaysOnTop: true, hasShadow: false, type: "notification", show: false, title: "Metria usage card",
     webPreferences: { preload: join(__dirname, "../preload/index.js"), contextIsolation: true, sandbox: true, nodeIntegration: false }
   });
   card.loadFile(join(__dirname, "../renderer/card.html"));
@@ -200,7 +250,9 @@ function cardBounds(index: number, height?: number): Electron.Rectangle {
 
 function positionCard(index: number, height?: number): void {
   if (!cardWindow) return;
-  cardWindow.setBounds(cardBounds(index, height ?? cardWindow.getBounds().height), false);
+  const bounds = cardBounds(index, height ?? cardWindow.getBounds().height);
+  cardWindow.setBounds(bounds, false);
+  cardWindow.setShape(cardShape(bounds.width, bounds.height, settings.load().widgetPosition));
 }
 
 interface UsageRow { name: string; percent: number; reset: string; logo: string; }
@@ -428,10 +480,12 @@ if (!hasSingleInstanceLock) {
 } else {
   app.on("second-instance", () => { showDashboard(); });
 }
-if (process.platform === "linux") {
-  // Reduced-compositing environments (no DRI3/VA-API render node) crash the GPU
-  // process and can fail to draw windows. Software compositing on Linux avoids
-  // the crash; keep hardware acceleration on macOS.
+const isWslg = process.platform === "linux"
+  && Boolean(process.env.WSL_INTEROP || process.env.WSL_DISTRO_NAME)
+  && Boolean(process.env.WAYLAND_DISPLAY || process.env.WSL2_GUI_APPS_ENABLED);
+if (process.platform === "linux" && !isWslg) {
+  // Reduced-compositing Linux environments can crash the GPU process. WSLg is
+  // excluded because software compositing breaks transparent window alpha there.
   app.disableHardwareAcceleration();
 }
 if (hasSingleInstanceLock) app.whenReady().then(() => {

@@ -76,8 +76,11 @@ function Card(): JSX.Element {
 
   useEffect(() => {
     if (!payload) return;
-    requestAnimationFrame(() => { void window.metria.resizeCard(Math.ceil(document.body.scrollHeight)); });
-  }, [payload, provider, usage.data]);
+    requestAnimationFrame(() => {
+      const card = document.querySelector<HTMLElement>(".notch-card");
+      if (card) void window.metria.resizeCard(Math.ceil(card.getBoundingClientRect().height));
+    });
+  }, [payload, provider, usage.data, settings.data?.widgetPosition]);
 
   const content = provider ? (
     provider.windows.length === 0 ? (
@@ -96,9 +99,10 @@ function Card(): JSX.Element {
     <div className="flex items-center gap-2 text-[13px] leading-[1.4] text-mute">Waiting for usage data...</div>
   );
 
-  return (
-     <main className="relative flex h-fit select-none flex-col rounded-[18px] bg-surface px-5 py-5 transition-colors duration-200 hover:bg-black" style={{ minWidth: CARD_WIDTH }}>
-       <h2 className="m-0 flex items-center gap-2.5 p-0 mb-4 text-[18px] font-medium leading-none">
+  const position = settings.data?.widgetPosition ?? "right";
+  const card = (
+     <main className="notch-card-body relative flex h-fit select-none flex-col px-5 py-5" style={{ width: CARD_WIDTH - 16 }}>
+       <h2 className="m-0 mb-4 flex items-center gap-2.5 p-0 text-[18px] font-medium leading-none">
         {provider && (
           <>
              <img className="h-[19px] w-[19px] shrink-0 object-contain" src={`./${PROVIDER_LOGOS[provider.kind]}`} alt="" />
@@ -109,7 +113,14 @@ function Card(): JSX.Element {
         )}
       </h2>
       <div>{content}</div>
-    </main>
+     </main>
+  );
+  return (
+    <div className={`notch-card notch-card-${position}`}>
+      {position === "left" || position === "top" ? <span className="notch-pointer" aria-hidden="true" /> : null}
+      {card}
+      {position === "right" || position === "bottom" ? <span className="notch-pointer" aria-hidden="true" /> : null}
+    </div>
   );
 }
 

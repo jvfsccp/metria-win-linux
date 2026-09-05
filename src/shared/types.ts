@@ -152,7 +152,11 @@ export function statusDotColor(hasError: boolean): string {
   return hasError ? "#ff9f0a" : "#30d158";
 }
 
-export const WIDGET_ITEM_HEIGHT = 52;
+// Keep the compact rail dimensions aligned with the native notch.
+export const WIDGET_WIDTH = 80;
+export const WIDGET_ITEM_HEIGHT = 64;
+export const WIDGET_ITEM_GAP = 10;
+export const WIDGET_PADDING = 12;
 export const CARD_WIDTH = 316;
 export const DEFAULT_WIDGET_Y_OFFSET = 12;
 export const DEFAULT_REFRESH_INTERVAL_SECONDS = 300;
