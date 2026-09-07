@@ -1,4 +1,4 @@
-export type ProviderKind = "Claude" | "Codex" | "OpenCode Go";
+export type ProviderKind = "Claude" | "Codex" | "OpenCode Go" | "Antigravity";
 
 export interface UsageWindow {
   title: string;
@@ -22,6 +22,7 @@ export type WidgetBehavior = "pinned" | "auto-hide";
 
 export interface AlertSettings {
   enabled: boolean;
+  notify: boolean;
   cautionThreshold: number;
   warningThreshold: number;
   criticalThreshold: number;
@@ -124,21 +125,32 @@ export interface ProviderSourceInfo {
   needsChoice: boolean;
 }
 
-export const ALL_PROVIDER_KINDS: ProviderKind[] = ["Claude", "Codex", "OpenCode Go"];
+export const ALL_PROVIDER_KINDS: ProviderKind[] = ["Claude", "Codex", "OpenCode Go", "Antigravity"];
 
 export function isProviderKind(value: unknown): value is ProviderKind {
-  return value === "Claude" || value === "Codex" || value === "OpenCode Go";
+  return value === "Claude" || value === "Codex" || value === "OpenCode Go" || value === "Antigravity";
 }
 
 export const PROVIDER_LOGOS: Record<ProviderKind, string> = {
   "Claude": "claude-logo.png",
   "Codex": "codex-logo.png",
-  "OpenCode Go": "opencode-logo.png"
+  "OpenCode Go": "opencode-logo.png",
+  "Antigravity": "antigravity-logo.png"
 };
 
 export function providerShortLabel(kind: ProviderKind): string {
   return kind === "OpenCode Go" ? "Go" : kind;
 }
+
+/** Known usage-window titles per provider, in display order. Shared by the
+ * settings UI (which window to hide) and the main-process visibility guard
+ * (how many windows may be hidden at once). */
+export const PROVIDER_WINDOW_TITLES: Record<ProviderKind, string[]> = {
+  Claude: ["Current session", "All models"],
+  Codex: ["Current session", "All models"],
+  "OpenCode Go": ["Current session", "This week", "This month"],
+  Antigravity: ["5-hour Gemini", "Weekly Gemini", "5-hour other models", "Weekly other models"]
+};
 
 export function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
