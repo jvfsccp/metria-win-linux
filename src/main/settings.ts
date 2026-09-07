@@ -1,7 +1,7 @@
 import { app } from "electron";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { ALL_PROVIDER_KINDS, DEFAULT_REFRESH_INTERVAL_SECONDS, DEFAULT_WIDGET_Y_OFFSET, isProviderKind } from "../shared/types";
+import { ALL_PROVIDER_KINDS, DEFAULT_REFRESH_INTERVAL_SECONDS, DEFAULT_WIDGET_Y_OFFSET, isProviderKind, PROVIDER_WINDOW_TITLES } from "../shared/types";
 import type { AlertSettings, AppSettings, ProviderKind, ProviderSourceChoice } from "../shared/types";
 
 const defaults: AppSettings = {
@@ -19,7 +19,7 @@ const defaults: AppSettings = {
   widgetDisplayId: null,
   providerSource: {},
   hiddenUsageWindowTitles: {},
-  alerts: { enabled: true, cautionThreshold: 40, warningThreshold: 65, criticalThreshold: 85, cautionColor: "#ffd60a", warningColor: "#ff9f0a", criticalColor: "#ff453a" }
+  alerts: { enabled: true, notify: true, cautionThreshold: 40, warningThreshold: 65, criticalThreshold: 85, cautionColor: "#ffd60a", warningColor: "#ff9f0a", criticalColor: "#ff453a" }
 };
 
 export class SettingsStore {
@@ -63,11 +63,11 @@ export class SettingsStore {
 
   setWindowVisible(kind: ProviderKind, title: string, visible: boolean): AppSettings {
     const current = this.load();
-    const knownTitles = kind === "OpenCode Go" ? ["Current session", "This week", "This month"] : ["Current session", "All models"];
+    const knownTitles = PROVIDER_WINDOW_TITLES[kind];
     if (!knownTitles.includes(title)) return current;
     const hidden = new Set(current.hiddenUsageWindowTitles[kind] ?? []);
     if (visible) hidden.delete(title);
-    else if (hidden.size < (kind === "OpenCode Go" ? 2 : 1)) hidden.add(title);
+    else if (hidden.size < knownTitles.length - 1) hidden.add(title);
     return this.save({ ...current, hiddenUsageWindowTitles: { ...current.hiddenUsageWindowTitles, [kind]: [...hidden] } });
   }
 
@@ -130,6 +130,7 @@ function normalizeAlerts(value: unknown): AlertSettings {
   const critical = Math.max(warning + 1, Math.min(100, Math.round(numberOr(candidate.criticalThreshold, defaults.alerts.criticalThreshold))));
   return {
     enabled: typeof candidate.enabled === "boolean" ? candidate.enabled : defaults.alerts.enabled,
+    notify: typeof candidate.notify === "boolean" ? candidate.notify : defaults.alerts.notify,
     cautionThreshold: caution, warningThreshold: warning, criticalThreshold: critical,
     cautionColor: typeof candidate.cautionColor === "string" ? candidate.cautionColor : defaults.alerts.cautionColor,
     warningColor: typeof candidate.warningColor === "string" ? candidate.warningColor : defaults.alerts.warningColor,
