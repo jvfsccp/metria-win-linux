@@ -13,3 +13,12 @@ test("provider credential roots honor Windows, Linux XDG, and explicit Codex hom
   assert.equal(providerPaths(win).claudeCredentials, join("C:\\Users\\Ada", ".claude", ".credentials.json"));
   assert.equal(providerPaths(linux).claudeCredentials, join("/home/ada", ".claude", ".credentials.json"));
 });
+
+test("antigravity binary path uses LOCALAPPDATA on Windows and ~/.local/bin elsewhere", () => {
+  const win = { platform: "win32", home: "C:\\Users\\Ada", env: { LOCALAPPDATA: "C:\\Users\\Ada\\AppData\\Local" } } as const;
+  const winNoEnv = { platform: "win32", home: "C:\\Users\\Ada", env: {} } as const;
+  const linux = { platform: "linux", home: "/home/ada", env: {} } as const;
+  assert.equal(providerPaths(win).antigravityBinary, join("C:\\Users\\Ada\\AppData\\Local", "agy", "bin", "agy.exe"));
+  assert.equal(providerPaths(winNoEnv).antigravityBinary, join("C:\\Users\\Ada", "AppData", "Local", "agy", "bin", "agy.exe"));
+  assert.equal(providerPaths(linux).antigravityBinary, join("/home/ada", ".local", "bin", "agy"));
+});

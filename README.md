@@ -56,6 +56,7 @@ Providers are enabled automatically when their local credentials or usage files 
 - **Claude**: credentials read from `~/.claude/.credentials.json` on Unix and from the equivalent host or WSL location on Windows.
 - **Codex**: credentials and the newest session read from `CODEX_HOME`/`~/.codex`, including WSL locations on Windows.
 - **OpenCode Go**: credentials read from `XDG_DATA_HOME`/`~/.local/share/opencode/auth.json` on Unix, `%APPDATA%` on Windows, or the WSL path.
+- **Antigravity**: no credential is read at all: usage comes from running the installed `agy` CLI (`agy -p "/usage"`) and parsing its four reported windows (5-hour/weekly × Gemini/other models), on the host or inside a WSL distro. The CLI authenticates itself, so Metria never reads a credential for it. Requires the Antigravity CLI; the `/usage` output format is not published by Google and can change without notice, outside this project's control.
 
 Providers are discovered on the host filesystem and, on Windows, in installed WSL distributions. These read-only locations are fixture-tested, not runtime-tested on every supported platform.
 
@@ -68,7 +69,7 @@ This version does not include phone pairing, the local PWA server, QR pairing, o
 ## Requirements
 
 - Windows or Linux for the supported desktop application.
-- Node.js 22+ and npm for building from source.
+- Node.js 22.x and npm for building from source. Node 24 currently breaks `npm install`'s Electron download step (its bundled `extract-zip` silently fails to unpack the binary) — use Node 22 until that's fixed upstream.
 - Windows and Linux builds must be created and runtime-tested on their respective platforms.
 
 ## Quick start

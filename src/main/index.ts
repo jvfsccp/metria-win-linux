@@ -1,11 +1,11 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } from "electron";
 import { autoUpdater } from "electron-updater";
 import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { ALL_PROVIDER_KINDS, CARD_WIDTH, isProviderKind, PROVIDER_LOGOS, providerShortLabel, WIDGET_ITEM_GAP, WIDGET_ITEM_HEIGHT, WIDGET_PADDING, WIDGET_WIDTH } from "../shared/types";
 import { ProviderService } from "./providers";
 import { SettingsStore } from "./settings";
-import type { AppSettings, ProviderKind, ProviderSourceChoice, ProviderUsage } from "../shared/types";
+import type { AlertSettings, AppSettings, ProviderKind, ProviderSourceChoice, ProviderUsage, UsageWindow } from "../shared/types";
 
 let window: BrowserWindow | undefined;
 let widgetWindow: BrowserWindow | undefined;
@@ -262,6 +262,56 @@ function formatReset(resetDate: string | null): string {
   if (seconds > 0 && seconds < 86400) { const totalMinutes = Math.floor(seconds / 60); const hours = Math.floor(totalMinutes / 60); const minutes = totalMinutes % 60; return hours > 0 ? (minutes > 0 ? `${hours} hr ${minutes} min` : `${hours} hr`) : `${minutes} min`; }
   return new Date(resetDate).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
+/**
+ * Desktop notifications when a usage window crosses a threshold going up.
+ * Aimed at teammates who don't watch the widget closely — e.g. a shared plan
+ * where one person burning through the 5-hour session locks everyone out.
+ */
+type AlertLevel = "caution" | "warning" | "critical";
+const ALERT_RANK: Record<AlertLevel, number> = { caution: 1, warning: 2, critical: 3 };
+const alertState = new Map<string, { level: AlertLevel | null; percent: number }>();
+
+function thresholdLevel(percent: number, alerts: AlertSettings): AlertLevel | null {
+  if (percent >= alerts.criticalThreshold) return "critical";
+  if (percent >= alerts.warningThreshold) return "warning";
+  if (percent >= alerts.cautionThreshold) return "caution";
+  return null;
+}
+function alertMessage(kind: ProviderKind, usageWindow: UsageWindow, level: AlertLevel, percent: number): { title: string; body: string } {
+  const reset = formatReset(usageWindow.resetDate);
+  const resetPhrase = reset ? ` Resets in ${reset}.` : "";
+  const title = `${providerShortLabel(kind)} — ${usageWindow.title}`;
+  if (level === "critical") return { title, body: `${percent}% used, almost at the limit.${resetPhrase} Pause heavy tasks until it resets — this matters most if you share this plan with teammates.` };
+  if (level === "warning") return { title, body: `${percent}% used and climbing.${resetPhrase} Good time to switch to lighter tasks.` };
+  return { title, body: `${percent}% used.${resetPhrase}` };
+}
+// Seed from cached usage on launch so a restart doesn't re-fire for a level the
+// user already saw last session; only a further climb notifies after this.
+function seedAlertState(values: ProviderUsage[]): void {
+  const alerts = settings.load().alerts;
+  for (const provider of values) for (const usageWindow of provider.windows) {
+    alertState.set(`${provider.kind}::${usageWindow.title}`, { level: thresholdLevel(usageWindow.percent, alerts), percent: usageWindow.percent });
+  }
+}
+function checkAlerts(values: ProviderUsage[]): void {
+  const alerts = settings.load().alerts;
+  if (!alerts.enabled || !alerts.notify || !Notification.isSupported()) return;
+  for (const provider of values) for (const usageWindow of provider.windows) {
+    const key = `${provider.kind}::${usageWindow.title}`;
+    const previous = alertState.get(key);
+    const level = thresholdLevel(usageWindow.percent, alerts);
+    // A drop means the window rolled over into a new cycle; forget the old level so climbing back up notifies again.
+    const rolledOver = previous !== undefined && usageWindow.percent < previous.percent - 1;
+    const previousLevel = rolledOver ? null : previous?.level ?? null;
+    if (level && (!previousLevel || ALERT_RANK[level] > ALERT_RANK[previousLevel])) {
+      const { title, body } = alertMessage(provider.kind, usageWindow, level, Math.round(usageWindow.percent));
+      const notification = new Notification({ title, body, silent: level === "caution" });
+      notification.on("click", () => showDashboard());
+      notification.show();
+    }
+    alertState.set(key, { level, percent: usageWindow.percent });
+  }
+}
 function findAsset(name: string): string | undefined {
   const candidates = app.isPackaged
     ? [join(process.resourcesPath, "MetriaPWA", name)]
@@ -435,6 +485,7 @@ async function usage() {
     return value.error && cached?.windows.length ? { ...value, accountLabel: value.accountLabel ?? cached.accountLabel, windows: cached.windows, updatedAt: cached.updatedAt } : value;
   });
   lastUsage = values;
+  checkAlerts(values);
   const fresh = values.filter((value) => value.windows.length && !value.error);
   if (fresh.length) saveCachedUsage(values);
   for (const target of [window, widgetWindow, cardWindow]) target?.webContents.send("metria:usage-updated");
@@ -490,6 +541,7 @@ if (process.platform === "linux" && !isWslg) {
 }
 if (hasSingleInstanceLock) app.whenReady().then(() => {
   lastUsage = loadCachedUsage();
+  seedAlertState(lastUsage);
   if (settings.load().showTray) createTray(); initAutoUpdater();
   if (supportsWidget() && settings.load().showWidget) {
     widgetWindow = createWidgetWindow();
@@ -523,7 +575,7 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
   });
   ipcMain.handle("metria:reconnect", async (event, kind: unknown) => {
     requireTrustedSender(event); if (!isProviderKind(kind)) throw new Error("Invalid provider.");
-    const command = kind === "Claude" ? "claude auth login" : kind === "Codex" ? "codex login" : "opencode auth login";
+    const command = kind === "Claude" ? "claude auth login" : kind === "Codex" ? "codex login" : kind === "OpenCode Go" ? "opencode auth login" : "agy";
     await shell.openPath(app.getPath("home"));
     return { command, message: `Run \`${command}\` in your terminal, then refresh Metria.` };
   });

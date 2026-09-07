@@ -1,13 +1,14 @@
 import { useEffect, useState, type JSX } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from "@tanstack/react-query";
-import { clampPercent, DEFAULT_REFRESH_INTERVAL_SECONDS, gaugeColor, PROVIDER_LOGOS, statusDotColor } from "../shared/types";
+import { clampPercent, DEFAULT_REFRESH_INTERVAL_SECONDS, gaugeColor, PROVIDER_LOGOS, PROVIDER_WINDOW_TITLES, statusDotColor } from "../shared/types";
 import type { AppSettings, ProviderKind, ProviderSourceChoice, ProviderUsage, UsageWindow } from "../shared/types";
 import "./app.css";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } });
 const SOURCES_KEY = ["provider-sources"] as const;
-const WINDOW_TITLES: Record<ProviderKind, string[]> = { Claude: ["Current session", "All models"], Codex: ["Current session", "All models"], "OpenCode Go": ["Current session", "This week", "This month"] };
+const DEFAULT_ALERTS: AppSettings["alerts"] = { enabled: true, notify: true, cautionThreshold: 40, warningThreshold: 65, criticalThreshold: 85, cautionColor: "#ffd60a", warningColor: "#ff9f0a", criticalColor: "#ff453a" };
+const WINDOW_TITLES = PROVIDER_WINDOW_TITLES;
 
 function useProviderSources() {
   return useQuery({ queryKey: SOURCES_KEY, queryFn: () => window.metria.getProviderSources() });
@@ -240,10 +241,11 @@ function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element {
 
         <section className="mt-6">
           <h3 className="m-0 text-sm font-semibold uppercase tracking-wider text-dim">Usage alerts</h3>
-          <label className="mt-3 flex items-center justify-between gap-4 text-dim">Color usage alerts <input type="checkbox" checked={settingsData?.alerts.enabled ?? true} onChange={(event) => setPreferences.mutate({ alerts: { ...(settingsData?.alerts ?? { cautionThreshold: 40, warningThreshold: 65, criticalThreshold: 85, cautionColor: "#ffd60a", warningColor: "#ff9f0a", criticalColor: "#ff453a" }), enabled: event.target.checked } })} /></label>
+          <label className="mt-3 flex items-center justify-between gap-4 text-dim">Color usage alerts <input type="checkbox" checked={settingsData?.alerts.enabled ?? true} onChange={(event) => setPreferences.mutate({ alerts: { ...(settingsData?.alerts ?? DEFAULT_ALERTS), enabled: event.target.checked } })} /></label>
+          <label className="mt-2 flex items-center justify-between gap-4 text-dim">Desktop notifications on threshold crossings <input type="checkbox" checked={settingsData?.alerts.notify ?? true} onChange={(event) => setPreferences.mutate({ alerts: { ...(settingsData?.alerts ?? DEFAULT_ALERTS), notify: event.target.checked } })} /></label>
           <div className="mt-3 grid grid-cols-3 gap-3">
             {(["caution", "warning", "critical"] as const).map((level) => {
-              const alerts = settingsData?.alerts ?? { enabled: true, cautionThreshold: 40, warningThreshold: 65, criticalThreshold: 85, cautionColor: "#ffd60a", warningColor: "#ff9f0a", criticalColor: "#ff453a" };
+              const alerts = settingsData?.alerts ?? DEFAULT_ALERTS;
               const thresholdKey = `${level}Threshold` as "cautionThreshold" | "warningThreshold" | "criticalThreshold";
               const colorKey = `${level}Color` as "cautionColor" | "warningColor" | "criticalColor";
               return <label key={level} className="grid gap-1 text-xs capitalize text-dim">{level}<input type="number" min="1" max="100" value={alerts?.[thresholdKey] ?? 0} onChange={(event) => setPreferences.mutate({ alerts: { ...(alerts!), [thresholdKey]: Number(event.target.value) } })} /><input type="color" value={alerts?.[colorKey] ?? "#ffffff"} onChange={(event) => setPreferences.mutate({ alerts: { ...(alerts!), [colorKey]: event.target.value } })} /></label>;

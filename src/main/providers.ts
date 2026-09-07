@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AppSettings, ProviderKind, ProviderSourceChoice, ProviderSourceInfo, ProviderUsage, UsageWindow, WslPresence } from "../shared/types";
 import { PRESENCE_CACHE_TTL_MS } from "../shared/types";
+import { ANTIGRAVITY_WSL_SCRIPT, parseAntigravityWindows, resolveHostBinary, runUsage } from "./antigravity";
 import { providerPaths, type ProviderPaths } from "./provider-paths";
 import { makeWslShell, type WslProviderPresence, type WslShell } from "./wsl";
 
@@ -25,7 +26,7 @@ export class ProviderService {
     private readonly wsl: WslShell = makeWslShell(),
     paths: ProviderPaths = defaultPaths
   ) {
-    this.providers = [new ClaudeProvider(paths), new CodexProvider(paths), new OpenCodeGoProvider(paths)];
+    this.providers = [new ClaudeProvider(paths), new CodexProvider(paths), new OpenCodeGoProvider(paths), new AntigravityProvider(paths)];
   }
 
   async fetch(enabled: ProviderKind[]): Promise<ProviderUsage[]> {
@@ -71,7 +72,7 @@ export class ProviderService {
   }
 }
 
-const POPULATION_BY_KIND: Record<ProviderKind, keyof WslProviderPresence> = { Claude: "claude", Codex: "codex", "OpenCode Go": "openCode" };
+const POPULATION_BY_KIND: Record<ProviderKind, keyof WslProviderPresence> = { Claude: "claude", Codex: "codex", "OpenCode Go": "openCode", Antigravity: "antigravity" };
 const WSL_DIR_BY_KIND: Partial<Record<ProviderKind, string>> = { Codex: ".codex/sessions" };
 
 /** Pick the data source for a provider given saved preference (if any) and presence. */
@@ -149,6 +150,23 @@ class OpenCodeGoProvider implements Provider {
     const data = await requestWithRetry("https://opencode.ai/zen/go/v1/usage", { Authorization: `Bearer ${key}` });
     const windows = parseOpenCodeGoWindows(data);
     return loaded(this.kind, windows, maskKey(key));
+  }
+}
+
+class AntigravityProvider implements Provider {
+  readonly kind = "Antigravity" as const;
+  readonly hint = "Install the Antigravity CLI (`agy`) and sign in to make usage available.";
+  constructor(private readonly paths: ProviderPaths) {}
+  hasHostCredentials(): boolean { return resolveHostBinary(this.paths.antigravityBinary, process.env.PATH, process.platform) !== undefined; }
+  async fetchHost(): Promise<ProviderUsage> {
+    const binary = resolveHostBinary(this.paths.antigravityBinary, process.env.PATH, process.platform);
+    if (!binary) throw new Error("The Antigravity CLI was not found. Install it and sign in, then refresh Metria.");
+    return this.usage(await runUsage(binary));
+  }
+  async fetchWsl(shell: WslShell, distro: string): Promise<ProviderUsage> { return this.usage(await shell.runCommand(distro, ANTIGRAVITY_WSL_SCRIPT)); }
+  private usage(output: string): ProviderUsage {
+    const windows = parseAntigravityWindows(output);
+    return windows.length ? loaded(this.kind, windows) : empty(this.kind);
   }
 }
 

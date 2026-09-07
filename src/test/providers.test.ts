@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chooseSource, parseCodexAuth, parseOpenCodeGoWindows } from "../main/providers";
+import { parseAntigravityWindows } from "../main/antigravity";
 import type { ProviderSourceInfo } from "../shared/types";
 
 function info(host: boolean, present: string[]): Pick<ProviderSourceInfo, "host" | "wsl"> {
@@ -46,4 +47,34 @@ test("parseOpenCodeGoWindows reads the API reset date", () => {
   assert.deepEqual(parseOpenCodeGoWindows(JSON.stringify({ usage: { rolling: { percent: 12, resetsAt: "2026-09-01T12:00:00.000Z" } } })), [
     { title: "Current session", percent: 12, resetDate: "2026-09-01T12:00:00.000Z" }
   ]);
+});
+
+test("parseAntigravityWindows inverts remaining% to used% and fixes slot order regardless of line order", () => {
+  const output = [
+    "others\tWeekly\t70%\t2026-09-08T00:00:00Z",
+    "gemini\t5-hour\t60%\t2026-09-06T20:00:00Z",
+    "gemini\tWeekly\t90%\t2026-09-08T00:00:00Z",
+    "others\tFive Hour\t20%\t2026-09-06T20:00:00Z"
+  ].join("\n");
+  assert.deepEqual(parseAntigravityWindows(output), [
+    { title: "5-hour Gemini", percent: 40, resetDate: "2026-09-06T20:00:00.000Z" },
+    { title: "Weekly Gemini", percent: 10, resetDate: "2026-09-08T00:00:00.000Z" },
+    { title: "5-hour other models", percent: 80, resetDate: "2026-09-06T20:00:00.000Z" },
+    { title: "Weekly other models", percent: 30, resetDate: "2026-09-08T00:00:00.000Z" }
+  ]);
+});
+
+test("parseAntigravityWindows omits a missing window instead of inventing it", () => {
+  const output = "gemini\t5-hour\t50%\t2026-09-06T20:00:00Z";
+  assert.deepEqual(parseAntigravityWindows(output), [{ title: "5-hour Gemini", percent: 50, resetDate: "2026-09-06T20:00:00.000Z" }]);
+});
+
+test("parseAntigravityWindows skips malformed lines instead of throwing", () => {
+  const output = ["not enough columns", "gemini\t5-hour\tNaN%\t2026-09-06T20:00:00Z", "gemini\t5-hour\t50%\t2026-09-06T20:00:00Z"].join("\n");
+  assert.deepEqual(parseAntigravityWindows(output), [{ title: "5-hour Gemini", percent: 50, resetDate: "2026-09-06T20:00:00.000Z" }]);
+});
+
+test("parseAntigravityWindows keeps the first line seen for a slot", () => {
+  const output = ["gemini\t5-hour\t50%\t2026-09-06T20:00:00Z", "gemini\t5-hour\t10%\t2026-09-06T21:00:00Z"].join("\n");
+  assert.deepEqual(parseAntigravityWindows(output), [{ title: "5-hour Gemini", percent: 50, resetDate: "2026-09-06T20:00:00.000Z" }]);
 });
