@@ -7,6 +7,9 @@
   "homepage": "https://github.com/yurirxmos/metria-win-linux",
   "desktopName": "Metria Electron",
   "main": "dist/main/index.js",
+  "engines": {
+    "node": ">=22.0.0 <23.0.0"
+  },
   "scripts": {
     "dev": "npm run build && electron .",
     "build": "tsc -p tsconfig.json && vite build && node scripts/copy-renderer-assets.cjs",
