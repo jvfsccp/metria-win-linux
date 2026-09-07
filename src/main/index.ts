@@ -686,7 +686,16 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
     void usage();
     return next;
   });
+  ipcMain.handle("metria:set-onboarding-completed", (event, completed: unknown) => {
+    requireTrustedSender(event);
+    if (typeof completed !== "boolean") throw new Error("Invalid onboarding setting.");
+    const next = settings.setOnboardingCompleted(completed);
+    broadcastSettings();
+    return next;
+  });
   restartRefreshTimer();
+  // A first-time user has no reason yet to know about the tray/widget, so surface the dashboard directly.
+  if (!settings.load().hasOnboarded) showDashboard();
 });
 app.on("window-all-closed", () => { /* Metria remains available through the tray. */ });
 app.on("before-quit", () => { isQuitting = true; if (refreshTimer) clearInterval(refreshTimer); if (updateTimer) clearInterval(updateTimer); });

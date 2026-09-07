@@ -47,6 +47,7 @@ export interface AppSettings {
   providerSource: Partial<Record<ProviderKind, ProviderSourceChoice>>;
   hiddenUsageWindowTitles: Partial<Record<ProviderKind, string[]>>;
   alerts: AlertSettings;
+  hasOnboarded: boolean;
 }
 
 export interface CardShowPayload {
@@ -84,6 +85,7 @@ export interface MetriaApi {
   setRefreshInterval(seconds: number): Promise<AppSettings>;
   getProviderSources(): Promise<ProviderSourceInfo[]>;
   setProviderSource(kind: ProviderKind, source: ProviderSourceChoice): Promise<AppSettings>;
+  setOnboardingCompleted(completed: boolean): Promise<AppSettings>;
 }
 
 export interface DisplayInfo { id: string; label: string; }

@@ -30,7 +30,8 @@ const api: MetriaApi = {
   quit: () => ipcRenderer.invoke("metria:quit"),
   setRefreshInterval: (seconds: number) => ipcRenderer.invoke("metria:set-refresh-interval", seconds),
   getProviderSources: () => ipcRenderer.invoke("metria:get-provider-sources"),
-  setProviderSource: (kind: ProviderKind, source: ProviderSourceChoice) => ipcRenderer.invoke("metria:set-provider-source", kind, source)
+  setProviderSource: (kind: ProviderKind, source: ProviderSourceChoice) => ipcRenderer.invoke("metria:set-provider-source", kind, source),
+  setOnboardingCompleted: (completed: boolean) => ipcRenderer.invoke("metria:set-onboarding-completed", completed)
 };
 
 contextBridge.exposeInMainWorld("metria", Object.freeze(api));

@@ -19,7 +19,8 @@ const defaults: AppSettings = {
   widgetDisplayId: null,
   providerSource: {},
   hiddenUsageWindowTitles: {},
-  alerts: { enabled: true, notify: true, cautionThreshold: 40, warningThreshold: 65, criticalThreshold: 85, cautionColor: "#ffd60a", warningColor: "#ff9f0a", criticalColor: "#ff453a" }
+  alerts: { enabled: true, notify: true, cautionThreshold: 40, warningThreshold: 65, criticalThreshold: 85, cautionColor: "#ffd60a", warningColor: "#ff9f0a", criticalColor: "#ff453a" },
+  hasOnboarded: false
 };
 
 export class SettingsStore {
@@ -43,7 +44,8 @@ export class SettingsStore {
         widgetDisplayId: typeof parsed.widgetDisplayId === "string" ? parsed.widgetDisplayId : defaults.widgetDisplayId,
         providerSource: normalizeProviderSource(parsed.providerSource),
         hiddenUsageWindowTitles: normalizeHiddenWindows(parsed.hiddenUsageWindowTitles),
-        alerts: normalizeAlerts(parsed.alerts)
+        alerts: normalizeAlerts(parsed.alerts),
+        hasOnboarded: typeof parsed.hasOnboarded === "boolean" ? parsed.hasOnboarded : defaults.hasOnboarded
       };
     } catch { return defaults; }
   }
@@ -78,6 +80,10 @@ export class SettingsStore {
   setProviderSource(kind: ProviderKind, source: ProviderSourceChoice): AppSettings {
     const current = this.load();
     return this.save({ ...current, providerSource: { ...current.providerSource, [kind]: source } });
+  }
+
+  setOnboardingCompleted(completed: boolean): AppSettings {
+    return this.save({ ...this.load(), hasOnboarded: completed });
   }
 
   private save(next: AppSettings): AppSettings {

@@ -131,6 +131,51 @@ function SourceChoiceModal(): JSX.Element {
   );
 }
 
+const ONBOARDING_STEPS: { title: string; body: string }[] = [
+  {
+    title: "Welcome to Metria",
+    body: "Metria tracks how much of your AI coding assistant usage you've used up — Claude, Codex, OpenCode Go, and Antigravity — so you never get surprised by a rate limit mid-task."
+  },
+  {
+    title: "Tray icon and edge widget",
+    body: "Metria lives in your system tray and as a small widget pinned to a screen edge. Hover over a provider in the widget for a quick usage card, or click the tray icon to reopen this dashboard anytime."
+  },
+  {
+    title: "Connect your providers",
+    body: "Most providers are detected automatically from credentials already on your machine. Antigravity is the exception: it needs its own \"agy\" CLI installed and signed in — if a card shows \"Setup\", click it for the exact command to run."
+  }
+];
+
+function OnboardingModal({ onFinish }: { onFinish: () => void }): JSX.Element {
+  const [step, setStep] = useState(0);
+  const lastStep = step === ONBOARDING_STEPS.length - 1;
+  const current = ONBOARDING_STEPS[step];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6" role="presentation">
+      <div role="dialog" aria-modal="true" aria-label="Welcome to Metria" className="w-[min(520px,100%)] bg-surface p-6 shadow-2xl">
+        <p className="m-0 text-xs uppercase tracking-wider text-dim">Step {step + 1} of {ONBOARDING_STEPS.length}</p>
+        <h2 className="m-0 mt-2 text-2xl font-semibold tracking-[-0.05em]">{current.title}</h2>
+        <p className="m-0 mt-3 leading-relaxed text-dim">{current.body}</p>
+        <div className="mt-6 flex items-center justify-between gap-2.5">
+          <button type="button" className="cursor-pointer border-none bg-transparent px-2 py-1.5 text-dim hover:text-fg disabled:opacity-0" onClick={onFinish}>
+            Skip
+          </button>
+          <div className="flex gap-2.5">
+            {step > 0 && (
+              <button type="button" className="cursor-pointer border border-line2 bg-transparent px-4 py-2 text-[#d8d8dc]" onClick={() => setStep(step - 1)}>
+                Back
+              </button>
+            )}
+            <button type="button" className="cursor-pointer border border-line2 bg-[#e8edf3] px-4 py-2 text-[#10151b]" onClick={() => (lastStep ? onFinish() : setStep(step + 1))}>
+              {lastStep ? "Get started" : "Next"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const REFRESH_OPTIONS = [300, 600, 900, 1800];
 const PLATFORM_LABEL: Record<string, string> = { win32: "Windows", linux: "Linux", darwin: "macOS" };
 
@@ -173,6 +218,10 @@ function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element {
     onSuccess: (next) => queryClient.setQueryData(["settings"], next)
   });
   const diagnose = useMutation({ mutationFn: (kind: ProviderKind) => window.metria.diagnose(kind), onSuccess: (message) => setNotice(message) });
+  const replayOnboarding = useMutation({
+    mutationFn: () => window.metria.setOnboardingCompleted(false),
+    onSuccess: (next) => { queryClient.setQueryData(["settings"], next); onClose(); }
+  });
   const providerSources = useProviderSources();
   const setProviderSource = useMutation({
     mutationFn: (variables: { kind: ProviderKind; source: ProviderSourceChoice }) => window.metria.setProviderSource(variables.kind, variables.source),
@@ -207,6 +256,10 @@ function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element {
             <div className="flex justify-between gap-4"><dt className="m-0 text-dim">Platform</dt><dd className="m-0">{info ? PLATFORM_LABEL[info.platform] ?? info.platform : "…"}</dd></div>
             {info && <div className="mt-2"><dt className="m-0 text-dim">Data folder</dt><dd className="m-0 mt-1 break-all font-mono text-xs text-mute">{info.dataPath}</dd></div>}
           </dl>
+          <button type="button" className="mt-3 cursor-pointer border border-line2 bg-transparent px-3 py-1.5 text-[#d8d8dc] disabled:opacity-55"
+            onClick={() => void replayOnboarding.mutate()} disabled={replayOnboarding.isPending}>
+            Replay onboarding
+          </button>
         </section>
 
         <section className="mt-6">
@@ -343,6 +396,10 @@ function Dashboard(): JSX.Element {
   });
   const sources = useProviderSources();
   const needsSourceChoice = (sources.data ?? []).some((info) => info.needsChoice);
+  const setOnboarded = useMutation({
+    mutationFn: (completed: boolean) => window.metria.setOnboardingCompleted(completed),
+    onSuccess: (next) => queryClient.setQueryData(["settings"], next)
+  });
   useEffect(() => {
     if (usage.isFetching) setStatus("Refreshing usage…");
     else if (usage.isError) setStatus("Metria could not refresh usage.");
@@ -388,6 +445,7 @@ function Dashboard(): JSX.Element {
       </section>
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       {needsSourceChoice && <SourceChoiceModal />}
+      {settings.isSuccess && !settings.data.hasOnboarded && <OnboardingModal onFinish={() => setOnboarded.mutate(true)} />}
     </main>
   );
 }
