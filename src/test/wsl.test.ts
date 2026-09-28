@@ -1,10 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decodeWslOutput, makeWslShell, type WslProviderPresence } from "../main/wsl";
+import { decodeWslOutput, isUserDistro, makeWslShell, type WslProviderPresence } from "../main/wsl";
 
 test("wsl distros parses wsl.exe --list --quiet output", async () => {
   const shell = makeWslShell({ platform: "win32", exec: async () => ({ stdout: "Ubuntu\r\nDebian\r\n" }) });
   assert.deepEqual(await shell.distros(), ["Ubuntu", "Debian"]);
+});
+
+test("wsl distros filters out internal engine distros", async () => {
+  const shell = makeWslShell({ platform: "win32", exec: async () => ({ stdout: "docker-desktop\r\ndocker-desktop-data\r\nrancher-desktop\r\nUbuntu\r\n" }) });
+  assert.deepEqual(await shell.distros(), ["Ubuntu"]);
+});
+
+test("isUserDistro identifies user distributions correctly", () => {
+  assert.equal(isUserDistro("Ubuntu"), true);
+  assert.equal(isUserDistro("Debian"), true);
+  assert.equal(isUserDistro("docker-desktop"), false);
+  assert.equal(isUserDistro("docker-desktop-data"), false);
+  assert.equal(isUserDistro("rancher-desktop"), false);
+  assert.equal(isUserDistro("podman-machine-default"), false);
+  assert.equal(isUserDistro(""), false);
 });
 
 test("wsl distros returns empty outside Windows", async () => {

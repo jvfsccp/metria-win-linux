@@ -34,16 +34,27 @@ const PROBE_SCRIPT = [
   "true"
 ].join("\n");
 
+const INTERNAL_DISTROS = ["docker-desktop", "rancher-desktop", "podman"];
+
+export function isUserDistro(name: string): boolean {
+  const lower = name.trim().toLowerCase();
+  return Boolean(lower) && !INTERNAL_DISTROS.some((internal) => lower.startsWith(internal));
+}
+
 export function makeWslShell(options: { platform?: NodeJS.Platform; exec?: WslExec; results?: Map<string, { at: number; presence: WslProviderPresence }> } = {}): WslShell {
   const platform = options.platform ?? process.platform;
   const exec = options.exec ?? wslExec;
   const results = options.results ?? new Map<string, { at: number; presence: WslProviderPresence }>();
+  let cachedDistros: { at: number; list: string[] } | undefined;
 
   async function distros(): Promise<string[]> {
     if (platform !== "win32") return [];
+    if (cachedDistros && Date.now() - cachedDistros.at < PRESENCE_CACHE_TTL_MS) return cachedDistros.list;
     try {
       const stdout = await exec("wsl.exe", ["--list", "--quiet"], { encoding: "buffer" });
-      return decodeWslOutput(stdout.stdout).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const list = decodeWslOutput(stdout.stdout).split(/\r?\n/).map((line) => line.trim()).filter(isUserDistro);
+      cachedDistros = { at: Date.now(), list };
+      return list;
     } catch {
       return [];
     }
@@ -108,11 +119,11 @@ export function decodeWslOutput(output: string | Buffer): string {
 
 function wslExec(command: string, args: string[], options?: { encoding: "buffer"; input?: string; timeoutMs?: number }): Promise<{ stdout: string | Buffer }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(command, args, { windowsHide: true, stdio: [options?.input ? "pipe" : "ignore", "pipe", "pipe"] });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
     const timeout = setTimeout(() => { child.kill(); reject(new Error("WSL command timed out.")); }, options?.timeoutMs ?? WSL_TIMEOUT_MS);
     child.on("error", (error) => { clearTimeout(timeout); reject(error); });
     child.on("close", (code) => {
@@ -120,7 +131,9 @@ function wslExec(command: string, args: string[], options?: { encoding: "buffer"
       if (code === 0) resolve({ stdout: Buffer.concat(stdout) });
       else reject(new Error(decodeWslOutput(Buffer.concat(stderr)).trim() || `wsl.exe exited with code ${code}`));
     });
-    if (options?.input) child.stdin.write(options.input);
-    child.stdin.end();
+    if (options?.input && child.stdin) {
+      child.stdin.write(options.input);
+      child.stdin.end();
+    }
   });
 }
